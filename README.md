@@ -1,5 +1,5 @@
-# Devlar
-
+# Devlar — Chrome Extension
+### by @the_evil_lord
 Devlar is a context-aware Chrome Extension (Manifest V3) designed to streamline prompt engineering, text analysis, and writing refinement directly within the browser. Powered by the **Groq API** for low-latency streaming completions, Devlar dynamically adapts its interface and system instructions depending on where and how you interact with a web page.
 
 ---
