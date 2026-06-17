@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Devlar - by @the_evil_lord",
+  "version": "1.0",
+  "description": "Your AI prompt co-pilot and universal grammar checker.",
+  "permissions": [
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ],
+  "action": {
+    "default_title": "Devlar Setup"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "optimize-prompt": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Open Devlar on selected text"
+    }
+  }
+}

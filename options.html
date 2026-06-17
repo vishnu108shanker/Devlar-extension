@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Devlar — Setup</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- API Key Card -->
+    <div class="card">
+      <div class="header">
+        <span class="logo-icon">✨</span>
+        <h1>Devlar</h1>
+        <p class="subtitle">by @the_evil_lord</p>
+      </div>
+
+      <div class="section-label">Groq API Key</div>
+      <div class="form-group">
+        <label for="apiKey">API Key</label>
+        <div class="input-container">
+          <input type="password" id="apiKey" placeholder="gsk_..." autocomplete="off">
+          <button type="button" class="toggle-password" id="togglePassword" title="Toggle visibility">👁️</button>
+        </div>
+        <p class="help-text">
+          Get a free key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq Console</a>.
+          Stored locally — never leaves your device.
+        </p>
+      </div>
+
+      <div class="status-indicator" id="statusMessage"></div>
+
+      <div class="button-group">
+        <button type="button" class="btn-secondary" id="testBtn">Test Key</button>
+        <button type="button" class="btn-primary" id="saveBtn">Save Key</button>
+      </div>
+    </div>
+
+    <!-- Persona Card -->
+    <div class="card persona-card">
+      <div class="persona-header">
+        <span class="persona-icon">🧠</span>
+        <div>
+          <h2>Your Context Profile</h2>
+          <p class="subtitle">Every prompt gets tailored around this context automatically.</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="userPersona">About You</label>
+        <textarea
+          id="userPersona"
+          rows="4"
+          placeholder="e.g. I'm a 2nd year CSE student in India preparing for product-based company placements. I mostly ask questions about DSA, system design, and web development. I prefer concise, practical answers with examples."
+        ></textarea>
+        <p class="help-text">
+          This is privately injected into Gemini as context before every optimization.
+          The better you describe yourself, the sharper your prompts will be.
+        </p>
+      </div>
+
+      <div class="status-indicator" id="personaStatus"></div>
+
+      <div class="button-group" style="grid-template-columns: 1fr;">
+        <button type="button" class="btn-primary" id="savePersonaBtn">Save Profile</button>
+      </div>
+    </div>
+
+    <!-- Tips Card -->
+    <div class="card tips-card">
+      <div class="tips-title">💡 Quick Tips</div>
+      <ul class="tips-list">
+        <li>Select any text → Right-click → Choose from the dynamic <strong>Devlar</strong> menu</li>
+        <li>Or use the keyboard shortcut at <a href="chrome://extensions/shortcuts" target="_blank">chrome://extensions/shortcuts</a></li>
+        <li>Switch between <strong>Concise</strong>, <strong>Expert</strong>, and <strong>Structured</strong> styles inside the overlay</li>
+        <li>Works on ChatGPT, Claude, Gemini, Perplexity — auto-detected 🎯</li>
+      </ul>
+    </div>
+
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
