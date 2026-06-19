@@ -1,19 +1,35 @@
-# Devlar — Chrome Extension
-### by @the_evil_lord
-Devlar is a context-aware Chrome Extension (Manifest V3) designed to streamline prompt engineering, text analysis, and writing refinement directly within the browser. Powered by the **Groq API** for low-latency streaming completions, Devlar dynamically adapts its interface and system instructions depending on where and how you interact with a web page.
+# Devlar — Version 2.0
+### Universal Prompt Co-Pilot, Text Analyzer, and Grammar Standardizer
+
+Devlar is a keyboard-driven Chrome Extension (Manifest V3) designed to streamline prompt engineering, text analysis, and writing refinement directly within your browser. Powered by the **Groq API** for low-latency streaming completions, Devlar provides a unified interface that allows you to process any selected text with five distinct tools instantly, regardless of the website you are on.
 
 ---
 
-## 🎯 Core Scenarios
+## 🌟 What's New in v2.0
 
-Devlar automatically detects the active DOM environment and transitions between four distinct operational modes:
+* **Unified Interface:** Devlar now presents the same consistent 5-option panel for all highlighted or selected text across all websites.
+* **Draggable Interface:** Grab Devlar by its header and drag the overlay window anywhere on your screen.
+* **Resizable Window:** Adjust the layout to fit your display by stretching or shrinking the window horizontally and vertically.
+* **Premium Visuals & Fluid Animations:** A dark glassmorphism card theme, pill-shaped tab selectors, smooth hover transitions, and a pulsing active glow.
+* **Code Standardization Support:** The Standardizer detects programming languages and can correct prose, basic syntax, typos, and logical bugs in code blocks.
+* **CSP-Safe Architecture:** Uses a robust native system UI font stack instead of external font imports to avoid console warnings and CSP blocking.
 
-| Scenario | Target Environment | Active Role | Behaviors & Features |
-| :--- | :--- | :--- | :--- |
-| **Scenario A** | AI Inputs (ChatGPT, Claude, Gemini, Perplexity, etc.) | **Prompt Engineer** | Transforms rough text drafts into optimized, platform-specific prompts. Provides **Concise**, **Expert**, and **Structured** style tabs within the UI. |
-| **Scenario B** | Static Text (Wikipedia, documentation, blogs, etc.) | **Text Analyst** | Analyzes the highlighted selection. Provides **Concise**, **In-Depth**, and **Standard Grammar** analysis tabs. |
-| **Scenario C** | Search Engines (Google, Bing, Yandex, etc.) | **Query Refiner** | Corrects grammar, spelling, and structural syntax strictly for short queries without changing intent. Hides selector tabs to minimize UI friction. |
-| **Scenario D** | Chat Inputs (WhatsApp, Discord, Slack, etc.) | **Chat Assistant** | Refines draft messages, correcting spelling and grammar while preserving the user’s original tone, formatting, and emojis. Hides tab selectors and the replace action to ensure safety on complex chat platforms. |
+---
+
+## 🛠️ The 5 Core Tools
+
+When you select text and trigger Devlar, you can switch between five distinct processing modes:
+
+1. **📝 Summarizer**
+	*Purpose:* Distills the core meaning of the selected text into a short, direct summary.
+2. **🧠 Prompt Engineer**
+	*Purpose:* Rewrites rough input into a clearer, more structured prompt for LLMs.
+3. **🔎 Query Refiner**
+	*Purpose:* Corrects spelling, grammar, and structure while preserving search intent.
+4. **📘 Explainer**
+	*Purpose:* Breaks down concepts, keywords, and technical details in a clear, educational way.
+5. **✍️ Standardizer**
+	*Purpose:* Cleans up grammar and, for code, handles simple syntax, typo, and logic fixes.
 
 ---
 
@@ -22,16 +38,13 @@ Devlar automatically detects the active DOM environment and transitions between 
 ### 1. Host DOM Isolation (Shadow DOM)
 To prevent the host website's stylesheets from conflicting with or breaking the extension's glassmorphism card layout, Devlar mounts its UI container inside an isolated **Shadow DOM root** (`#devlar-root`). 
 
-### 2. Context-Aware Pipeline
-The content script listens to native browser events (`focusin`, `mousedown`, `contextmenu`, `keyup`, and `selectionchange`) to identify whether the target element is a plain input, a native `<textarea>`, a custom `contenteditable` component, or static text. It dynamically re-registers Chrome's context menu contexts between `["selection"]` and `["selection", "editable"]` on the fly.
-
-### 3. Framework-Aware Writeback (Text Replacement)
+### 2. Framework-Aware Writeback (Text Replacement)
 For standard forms, inputs, and textareas, Devlar safely replaces the target value. To ensure compatibility with reactive virtual DOMs (such as React, Vue, or Angular), it accesses the element’s native property prototype setters to write the new value and dispatches native `input` and `change` events so application states update correctly. On complex editors, it falls back to simulated insertions via `document.execCommand`.
 
-### 4. Lightweight Word-by-Word Diff Engine
-For Scenarios C and D, Devlar computes and renders a visual structural diff in real-time once streaming completes. Written as a dependency-free Longest Common Subsequence (LCS) algorithm inside `content.js`, it cleanly wraps inserted text in `<ins>` tags (green background) and deleted text in `<del>` tags (red strikethrough), leaving unchanged text raw.
+### 3. Lightweight Word-by-Word Diff Engine
+Devlar computes and renders a visual structural diff in real-time once streaming completes. Written as a dependency-free Longest Common Subsequence (LCS) algorithm inside `content.js`, it cleanly wraps inserted text in `<ins>` tags (green background) and deleted text in `<del>` tags (red strikethrough), leaving unchanged text raw.
 
-### 5. Private Context Profiles
+### 4. Private Context Profiles
 Users can configure a personal background profile in the settings. When saved, this profile is privately injected into the LLM system context as metadata, allowing the inference engine to tailor explanations or prompts to the user's specific background (e.g., academic level, primary programming languages, or professional field).
 
 ---
