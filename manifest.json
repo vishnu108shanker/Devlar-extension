@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Devlar - by @the_evil_lord",
-  "version": "1.0",
-  "description": "Your AI prompt co-pilot and universal grammar checker.",
+  "version": "2.0",
+  "description": "Your AI prompt co-pilot and universal writing helper with premium UI enhancements.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "permissions": [
-    "contextMenus",
     "activeTab",
     "scripting",
     "storage"
@@ -26,7 +30,12 @@
     }
   ],
   "action": {
-    "default_title": "Devlar Setup"
+    "default_title": "Devlar Setup",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   },
   "options_page": "options.html",
   "commands": {

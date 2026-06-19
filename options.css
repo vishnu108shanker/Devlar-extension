@@ -206,7 +206,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important
 .status-error   { background: rgba(244,63,94,0.08);  border: 1px solid rgba(244,63,94,0.2);  color: #fb7185; display: block; }
 .status-loading { background: rgba(255,255,255,0.02); border: 1px solid var(--border); color: var(--text-muted); display: block; }
 
-/* Persona card header */
+/* Persona Card Header */
 .persona-header {
   display: flex;
   align-items: flex-start;
@@ -216,7 +216,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important
 .persona-icon { font-size: 1.8rem; flex-shrink: 0; margin-top: 2px; }
 h2 { font-size: 1rem; font-weight: 700; margin-bottom: 2px; }
 
-/* Tips card */
+/* Tips Card */
 .tips-card { padding: 20px 24px; }
 .tips-title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.05em; }
 .tips-list {

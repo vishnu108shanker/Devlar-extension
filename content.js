@@ -2,39 +2,30 @@
 let overlayContainer = null;
 let shadowRoot = null;
 let streamContentEl = null;
-let lastTargetElement = null; // Track target elements for writeback replacements
+let lastTargetElement = null; // Track targets for selections/replacements
 
-// ─── AI Domain List (must match background.js) ─────────────────────────────
-const AI_DOMAINS = [
-  "chat.openai.com", "chatgpt.com",
-  "claude.ai",
-  "gemini.google.com",
-  "perplexity.ai",
-  "grok.com",
-  "copilot.microsoft.com",
-  "groq.com", "chat.groq.com",
-  "nastia.ai"
-];
+// Drag State
+let isDraggingOverlay = false;
+let dragStartX = 0, dragStartY = 0;
+let dragInitialLeft = 0, dragInitialTop = 0;
 
-const SEARCH_DOMAINS = [
-  "google.com", "bing.com", "yahoo.com", "duckduckgo.com", "ecosia.org", "yandex.com"
-];
+window.addEventListener("mousemove", (e) => {
+  if (!isDraggingOverlay || !overlayContainer) return;
+  const dx = e.clientX - dragStartX;
+  const dy = e.clientY - dragStartY;
+  overlayContainer.style.left = `${dragInitialLeft + dx}px`;
+  overlayContainer.style.top = `${dragInitialTop + dy}px`;
+});
 
-function isAIDomain() {
-  const host = window.location.hostname;
-  return AI_DOMAINS.some(d => host === d || host.endsWith("." + d));
-}
-
-// ─── Input Detection ────────────────────────────────────────────────────────
-function isSearchDomain() {
-  const host = window.location.hostname;
-  return SEARCH_DOMAINS.some(d => host === d || host.endsWith("." + d));
-}
+window.addEventListener("mouseup", () => {
+  if (isDraggingOverlay) {
+    isDraggingOverlay = false;
+    document.body.style.userSelect = "";
+  }
+});
 
 function isInputElement(el) {
   if (!el) return false;
-  
-  // Evaluate text nodes via parent
   let curr = el.nodeType === 3 ? el.parentElement : el;
 
   const checkNode = (node) => {
@@ -47,57 +38,22 @@ function isInputElement(el) {
       if (node.getAttribute("contenteditable") === "true") return true;
       if (node.getAttribute("role") === "textbox") return true;
     }
-    
-    if (node.classList && typeof node.classList.contains === "function") {
-      if (
-        node.classList.contains("lexical") || 
-        node.classList.contains("selectable-text") ||
-        node.classList.contains("ProseMirror") || 
-        node.classList.contains("draft-js-editor") || 
-        node.classList.contains("ql-editor")
-      ) {
-        return true;
-      }
-    }
     return false;
   };
 
   if (checkNode(curr)) return true;
   if (checkNode(document.activeElement)) return true;
   
-  // Traverse DOM ancestry
   let parent = curr ? curr.parentElement : null;
   for (let i = 0; i < 15 && parent; i++) {
     if (checkNode(parent)) return true;
     parent = parent.parentElement;
   }
-
-  // Handle active element in shadow tree
-  let activeEl = document.activeElement;
-  while (activeEl && activeEl.shadowRoot && activeEl.shadowRoot.activeElement) {
-    activeEl = activeEl.shadowRoot.activeElement;
-    if (checkNode(activeEl)) return true;
-  }
-
   return false;
 }
 
 function isTargetEditable() {
   return lastTargetElement && isInputElement(lastTargetElement);
-}
-
-// ─── Scenario Detection ─────────────────────────────────────────────────────
-let lastScenario = null;
-
-function detectScenario(targetEl) {
-  const inInput = isInputElement(targetEl);
-  const onAI = isAIDomain();
-  const onSearch = isSearchDomain();
-
-  if (inInput && onAI) return "A";       // AI site input
-  if (inInput && onSearch) return "C";   // Standard search engine input
-  if (inInput) return "D";               // Default input behavior (Chat Assistant)
-  return "B";                             // Static text
 }
 
 function safeSendMessage(message, callback) {
@@ -109,42 +65,9 @@ function safeSendMessage(message, callback) {
       });
     }
   } catch (e) {
-    // Suppress context invalidation errors
+    // Context invalidated suppression
   }
 }
-
-function notifyScenario(scenario) {
-  if (scenario !== lastScenario) {
-    lastScenario = scenario;
-    safeSendMessage({ action: "updateContextMenu", scenario });
-  }
-}
-
-// ─── Event Listeners ────────────────────────────────────────────────────────
-document.addEventListener("focusin", (e) => {
-  notifyScenario(detectScenario(e.target));
-}, true);
-
-document.addEventListener("mousedown", (e) => {
-  notifyScenario(detectScenario(e.target));
-}, true);
-
-document.addEventListener("contextmenu", (e) => {
-  notifyScenario(detectScenario(e.target));
-}, true);
-
-document.addEventListener("keyup", (e) => {
-  notifyScenario(detectScenario(e.target));
-}, true);
-
-document.addEventListener("selectionchange", () => {
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount > 0) {
-    const anchor = sel.anchorNode;
-    const el = anchor?.nodeType === 3 ? anchor.parentElement : anchor;
-    notifyScenario(detectScenario(el));
-  }
-});
 
 // ─── Word-by-Word Diff Algorithm (LCS) ──────────────────────────────────────
 function computeWordDiff(oldStr, newStr) {
@@ -197,7 +120,6 @@ function computeWordDiff(oldStr, newStr) {
 // ─── Direct Selection Replacement (Writeback) Helper ────────────────────────
 function writeBackText(targetEl, optimizedText) {
   if (!targetEl) return;
-
   targetEl.focus();
 
   const isInputOrTextarea = targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA";
@@ -207,7 +129,6 @@ function writeBackText(targetEl, optimizedText) {
       const start = targetEl.selectionStart;
       const end = targetEl.selectionEnd;
 
-      // Access prototype descriptors to update values in React/Vue virtual DOMs
       const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set 
         || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
 
@@ -228,28 +149,22 @@ function writeBackText(targetEl, optimizedText) {
         }
       }
 
-      // Dispatch events to trigger virtual DOM updates
       targetEl.dispatchEvent(new Event('input', { bubbles: true }));
       targetEl.dispatchEvent(new Event('change', { bubbles: true }));
     } catch (e) {
       targetEl.value = optimizedText;
       targetEl.dispatchEvent(new Event('input', { bubbles: true }));
-      targetEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
   } else {
-    // Handle contenteditable, DraftJS, Lexical, ProseMirror, Slate, etc.
     const sel = window.getSelection();
     if (sel) {
-      // If there is no highlight selection, select all content so insertText replaces it fully
       if (!sel.toString().trim() || !targetEl.contains(sel.anchorNode)) {
         const range = document.createRange();
         range.selectNodeContents(targetEl);
         sel.removeAllRanges();
         sel.addRange(range);
       }
-
       try {
-        // execCommand triggers native editor engines to adjust virtual DOM state smoothly
         const success = document.execCommand("insertText", false, optimizedText);
         if (!success) {
           targetEl.innerText = optimizedText;
@@ -263,33 +178,35 @@ function writeBackText(targetEl, optimizedText) {
   }
 }
 
-// ─── Overlay Styles (Shadow DOM) ────────────────────────────────────────────
+// ─── Overlay Styles (Shadow DOM with Local Fallbacks - CSP Safe) ─────────────
 const overlayStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
   :host { all: initial; }
 
   .overlay-card {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     position: absolute;
     width: 440px;
-    background: rgba(14, 16, 24, 0.92);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 16px;
+    background: linear-gradient(145deg, rgba(18, 20, 31, 0.95) 0%, rgba(10, 12, 18, 0.98) 100%);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
     color: #f3f4f6;
-    padding: 18px 20px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1);
+    padding: 20px 24px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
     display: flex;
     flex-direction: column;
     pointer-events: auto;
-    animation: slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
+    resize: both;
+    overflow: hidden;
+    min-width: 320px;
+    min-height: 200px;
   }
 
   @keyframes slideIn {
-    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    from { opacity: 0; transform: translateY(12px) scale(0.96); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
 
@@ -297,106 +214,122 @@ const overlayStyles = `
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    cursor: grab;
+    user-select: none;
+  }
+  .overlay-header:active {
+    cursor: grabbing;
   }
 
   .title {
-    font-size: 0.875rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%);
+    font-size: 0.95rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #c7d2fe 0%, #818cf8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
-  }
-
-  .site-badge {
-    font-size: 0.65rem;
-    padding: 2px 7px;
-    background: rgba(99,102,241,0.12);
-    border: 1px solid rgba(99,102,241,0.25);
-    border-radius: 20px;
-    color: #a5b4fc;
-    -webkit-text-fill-color: #a5b4fc;
-    font-weight: 500;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.5px;
   }
 
   .dismiss-btn {
-    background: none;
-    border: none;
-    color: #6b7280;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    color: #9ca3af;
     cursor: pointer;
-    font-size: 1.1rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.15s, color 0.15s;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
     flex-shrink: 0;
   }
-  .dismiss-btn:hover { background: rgba(255,255,255,0.07); color: #f3f4f6; }
+  .dismiss-btn:hover { background: rgba(244,63,94,0.15); color: #fb7185; border-color: rgba(244,63,94,0.3); transform: scale(1.05); }
 
-  /* Style Selector */
+  /* Tab Styles (Animated Buttons) */
   .style-selector {
     display: flex;
-    background: rgba(0,0,0,0.25);
-    border-radius: 8px;
-    padding: 3px;
-    margin-bottom: 12px;
-    gap: 2px;
+    flex-wrap: wrap;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    padding: 6px;
+    margin-bottom: 16px;
+    gap: 6px;
+    border: 1px solid rgba(255,255,255,0.04);
   }
 
   .style-tab {
     flex: 1;
-    background: none;
-    border: none;
-    color: #6b7280;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid transparent;
+    color: #9ca3af;
     font-size: 0.72rem;
-    font-weight: 500;
-    padding: 6px 2px;
-    border-radius: 5px;
+    font-weight: 600;
+    padding: 8px 6px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: center;
     font-family: inherit;
     white-space: nowrap;
+    position: relative;
+    overflow: hidden;
   }
-  .style-tab:hover { color: #d1d5db; background: rgba(255,255,255,0.04); }
+  .style-tab:hover { 
+    color: #e5e7eb; 
+    background: rgba(255,255,255,0.08); 
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .style-tab:active {
+    transform: translateY(0);
+  }
   .style-tab.active {
-    color: #fff;
-    background: #5c5fea;
-    box-shadow: 0 2px 8px rgba(92,95,234,0.35);
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: 0 4px 15px rgba(99,102,241,0.4);
+    transform: translateY(-1px);
+    animation: pulseGlow 2s infinite alternate;
   }
 
-  /* Content area */
+  @keyframes pulseGlow {
+    0% { box-shadow: 0 4px 15px rgba(99,102,241,0.4); }
+    100% { box-shadow: 0 4px 20px rgba(99,102,241,0.6); }
+  }
+
+  /* Content Area */
   .content-area {
-    font-size: 0.83rem;
-    line-height: 1.6;
+    font-size: 0.88rem;
+    line-height: 1.65;
     overflow-y: auto;
-    max-height: 210px;
-    margin-bottom: 14px;
+    max-height: 240px;
+    flex-grow: 1;
+    margin-bottom: 16px;
     white-space: pre-wrap;
     word-break: break-word;
     color: #e5e7eb;
-    padding-right: 4px;
-    min-height: 40px;
+    padding-right: 8px;
+    min-height: 60px;
   }
-  .content-area::-webkit-scrollbar { width: 5px; }
-  .content-area::-webkit-scrollbar-track { background: transparent; }
-  .content-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-  .content-area::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
+  .content-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+  .content-area::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 
-  /* Typing cursor */
+  /* Typing Cursor */
   .typing-cursor {
     display: inline-block;
     width: 2px;
-    height: 0.95em;
-    background: #6366f1;
-    border-radius: 1px;
-    margin-left: 2px;
+    height: 1em;
+    background: #818cf8;
+    border-radius: 2px;
+    margin-left: 3px;
     vertical-align: text-bottom;
     animation: blink 0.7s infinite;
   }
@@ -405,148 +338,111 @@ const overlayStyles = `
     50%       { opacity: 0; }
   }
 
-  /* Loading */
+  /* Loader */
   .loader-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 28px 0;
-    color: #6b7280;
-    font-size: 0.8rem;
-    gap: 10px;
+    padding: 36px 0;
+    color: #9ca3af;
+    font-size: 0.85rem;
+    gap: 12px;
+    font-weight: 500;
   }
   .spinner {
-    width: 26px;
-    height: 26px;
-    border: 2px solid rgba(99,102,241,0.12);
-    border-top-color: #6366f1;
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(99,102,241,0.15);
+    border-top-color: #818cf8;
     border-radius: 50%;
-    animation: spin 0.75s linear infinite;
+    animation: spin 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Error */
   .error-container {
-    color: #fb7185;
-    padding: 12px;
-    background: rgba(244,63,94,0.07);
-    border: 1px solid rgba(244,63,94,0.18);
-    border-radius: 8px;
-    font-size: 0.8rem;
-    margin-bottom: 14px;
-    line-height: 1.5;
+    color: #ffe4e6;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba(225,29,72,0.15) 0%, rgba(190,18,60,0.2) 100%);
+    border: 1px solid rgba(244,63,94,0.3);
+    border-radius: 10px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    line-height: 1.6;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
   }
 
   /* Footer Layout */
   .overlay-footer {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    border-top: 1px solid rgba(255,255,255,0.05);
-    padding-top: 12px;
-    gap: 12px;
-  }
-
-  .footer-hint {
-    font-size: 0.72rem;
-    color: #a5b4fc;
-    opacity: 0.85;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-  }
-
-  .footer-buttons {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-    margin-left: auto;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 14px;
+    gap: 10px;
+    margin-top: auto;
   }
 
   .btn {
-    padding: 8px 16px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    border-radius: 7px;
+    padding: 10px 18px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border-radius: 10px;
     cursor: pointer;
-    transition: all 0.18s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     font-family: inherit;
+    letter-spacing: 0.3px;
   }
   .btn-copy {
-    background: #5c5fea;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
     color: #fff;
-    border: none;
-    box-shadow: 0 3px 10px rgba(92,95,234,0.25);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.3);
   }
-  .btn-copy:hover { background: #4f52d4; transform: translateY(-1px); }
+  .btn-copy:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(79,70,229,0.4); }
   
   .btn-replace {
-    background: #4f46e5;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: #fff;
-    border: none;
-    box-shadow: 0 3px 10px rgba(79,70,229,0.25);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 12px rgba(16,185,129,0.3);
   }
-  .btn-replace:hover { background: #4338ca; transform: translateY(-1px); }
+  .btn-replace:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16,185,129,0.4); }
 
   .btn-dismiss {
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.1);
-    color: #9ca3af;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #d1d5db;
   }
-  .btn-dismiss:hover { background: rgba(255,255,255,0.05); color: #d1d5db; }
-  .btn:active { transform: translateY(0) !important; }
+  .btn-dismiss:hover { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-2px); }
+  .btn:active { transform: translateY(1px) !important; box-shadow: none !important; }
 `;
 
-// ─── Mode Config: titles, badges, and tab sets ──────────────────────────────
-const MODE_CONFIG = {
-  // Scenario A — AI Prompt
-  ai_concise:    { scenario: "A", title: "Devlar", badge: null, tabs: "ai" },
-  ai_expert:     { scenario: "A", title: "Devlar", badge: null, tabs: "ai" },
-  ai_structured: { scenario: "A", title: "Devlar", badge: null, tabs: "ai" },
-  // Scenario B — Static Text
-  static_concise: { scenario: "B", title: "Devlar", badge: "📖 Text Analysis", tabs: "static" },
-  static_explain: { scenario: "B", title: "Devlar", badge: "📖 Text Analysis", tabs: "static" },
-  static_grammar: { scenario: "B", title: "Devlar", badge: "✍️ Grammar",       tabs: "static" },
-  // Scenario C — Search/Standard
-  standard_grammar: { scenario: "C", title: "Devlar", badge: "✍️ Grammar Check", tabs: "standard" },
-  // Scenario D — Chat Apps & All Other Inputs
-  chat_standard: { scenario: "D", title: "Devlar", badge: "💬 Chat Assistant", tabs: "standard" },
-};
+// ─── Mode Config: Titles & Tabs ──────────────────────────────────────────────
+const MODES = [
+  { id: "summarize", label: "📝 Summarize" },
+  { id: "prompt_engineer", label: "🤖 Prompt" },
+  { id: "query_refiner", label: "🔍 Refine Query" },
+  { id: "explain", label: "🎓 Explain" },
+  { id: "standardize", label: "✍️ Standardize" }
+];
 
-function getHeaderHTML(mode, siteContext) {
-  const config = MODE_CONFIG[mode] || MODE_CONFIG.static_concise;
-  let badgeHTML = "";
-
-  if (config.scenario === "A" && siteContext) {
-    badgeHTML = ` <span style="color:#6b7280; font-weight:400; margin:0 4px;">~</span> <span class="site-badge">🎯 ${siteContext.name}</span>`;
-  } else if (config.badge) {
-    badgeHTML = ` <span style="color:#6b7280; font-weight:400; margin:0 4px;">~</span> <span class="site-badge">${config.badge}</span>`;
-  }
-
-  return `<span class="title">✨ ${config.title}${badgeHTML}</span>`;
+function getHeaderHTML() {
+  return `<span class="title">✨ Devlar</span>`;
 }
 
 function renderModeTabs(currentMode) {
-  const config = MODE_CONFIG[currentMode] || MODE_CONFIG.static_concise;
-
-  if (config.tabs === "ai") {
-    return `<div class="style-selector">
-      <button class="style-tab ${currentMode === "ai_concise"    ? "active" : ""}" data-mode="ai_concise">⚡ Concise</button>
-      <button class="style-tab ${currentMode === "ai_expert"     ? "active" : ""}" data-mode="ai_expert">🎓 Expert</button>
-      <button class="style-tab ${currentMode === "ai_structured" ? "active" : ""}" data-mode="ai_structured">📊 Structured</button>
-    </div>`;
-  } else if (config.tabs === "static") {
-    return `<div class="style-selector">
-      <button class="style-tab ${currentMode === "static_concise" ? "active" : ""}" data-mode="static_concise">⚡ Concise</button>
-      <button class="style-tab ${currentMode === "static_explain" ? "active" : ""}" data-mode="static_explain">📖 Explanation</button>
-      <button class="style-tab ${currentMode === "static_grammar" ? "active" : ""}" data-mode="static_grammar">✍️ Standard Format</button>
-    </div>`;
-  } else {
-    return "";
-  }
+  let tabsHTML = `<div class="style-selector">`;
+  MODES.forEach(mode => {
+    const activeClass = currentMode === mode.id ? "active" : "";
+    tabsHTML += `<button class="style-tab ${activeClass}" data-mode="${mode.id}">${mode.label}</button>`;
+  });
+  tabsHTML += `</div>`;
+  return tabsHTML;
 }
 
-// ─── Overlay Helpers ────────────────────────────────────────────────────────
+// ─── Overlay Handlers ────────────────────────────────────────────────────────
 function ensureOverlayCreated() {
   if (overlayContainer) return;
   overlayContainer = document.createElement("div");
@@ -608,7 +504,6 @@ function getSelectionDetails() {
     }
   } else {
     text = window.getSelection().toString().trim();
-    
     if (!text && isInputElement(activeEl)) {
       text = activeEl.innerText || activeEl.textContent || "";
       text = text.trim();
@@ -682,7 +577,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     while (activeEl && activeEl.shadowRoot && activeEl.shadowRoot.activeElement) {
       activeEl = activeEl.shadowRoot.activeElement;
     }
-    // Track active target element for replacements
     lastTargetElement = activeEl;
 
     const details = getSelectionDetails();
@@ -690,11 +584,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   else if (request.action === "showOverlayLoading") {
     ensureOverlayCreated();
-    renderLoading(request.rawText, request.currentMode, request.coords, request.siteContext);
+    renderLoading(request.rawText, request.currentMode, request.coords);
   }
   else if (request.action === "showOverlayStreamStart") {
     ensureOverlayCreated();
-    renderStreamStart(request.rawText, request.currentMode, request.coords, request.siteContext, request.persona);
+    renderStreamStart(request.rawText, request.currentMode, request.coords, request.persona);
   }
   else if (request.action === "appendStreamChunk") {
     if (streamContentEl) {
@@ -706,7 +600,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
   }
   else if (request.action === "showOverlayStreamComplete") {
-    finalizeStream(request.fullText, request.rawText, request.currentMode, request.coords, request.siteContext, request.persona);
+    finalizeStream(request.fullText, request.rawText, request.currentMode, request.coords, request.persona);
   }
   else if (request.action === "showOverlayError") {
     ensureOverlayCreated();
@@ -716,13 +610,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // ─── Render: Loading Spinner ─────────────────────────────────────────────────
-function renderLoading(rawText, currentMode, coords, siteContext) {
+function renderLoading(rawText, currentMode, coords) {
   clearShadow();
   const card = document.createElement("div");
   card.className = "overlay-card";
   card.innerHTML = `
     <div class="overlay-header">
-      ${getHeaderHTML(currentMode, siteContext)}
+      ${getHeaderHTML()}
       <button class="dismiss-btn" id="optCloseBtn">×</button>
     </div>
     ${renderModeTabs(currentMode)}
@@ -732,36 +626,37 @@ function renderLoading(rawText, currentMode, coords, siteContext) {
     </div>
   `;
   shadowRoot.appendChild(card);
+  attachDragToHeader();
   card.querySelector("#optCloseBtn").addEventListener("click", dismissOverlay);
   setTimeout(() => positionOverlay(coords), 10);
 }
 
 // ─── Render: Streaming Start ─────────────────────────────────────────────────
-function renderStreamStart(rawText, currentMode, coords, siteContext, persona) {
+function renderStreamStart(rawText, currentMode, coords, persona) {
   clearShadow();
   const card = document.createElement("div");
   card.className = "overlay-card";
   card.innerHTML = `
     <div class="overlay-header">
-      ${getHeaderHTML(currentMode, siteContext)}
+      ${getHeaderHTML()}
       <button class="dismiss-btn" id="optCloseBtn">×</button>
     </div>
     ${renderModeTabs(currentMode)}
     <div class="content-area" id="optStreamContent"><span class="typing-cursor"></span></div>
   `;
   shadowRoot.appendChild(card);
+  attachDragToHeader();
   streamContentEl = card.querySelector("#optStreamContent");
   card.querySelector("#optCloseBtn").addEventListener("click", dismissOverlay);
-  attachTabEvents(rawText, coords, siteContext, persona);
+  attachTabEvents(rawText, coords, persona);
   setTimeout(() => positionOverlay(coords), 10);
 }
 
-// ─── Finalize: Add Footer Buttons ────────────────────────────────────────────
-function finalizeStream(fullText, rawText, currentMode, coords, siteContext, persona) {
+// ─── Finalize: Footer Actions ────────────────────────────────────────────────
+function finalizeStream(fullText, rawText, currentMode, coords, persona) {
   if (streamContentEl) {
-    const isGrammarMode = currentMode === "standard_grammar" || currentMode === "chat_standard";
-    if (isGrammarMode && rawText) {
-      // Render word-by-word structural diff
+    const isDiffMode = currentMode === "standardize" || currentMode === "query_refiner";
+    if (isDiffMode && rawText) {
       streamContentEl.innerHTML = computeWordDiff(rawText, fullText);
     } else {
       streamContentEl.textContent = fullText;
@@ -778,23 +673,14 @@ function finalizeStream(fullText, rawText, currentMode, coords, siteContext, per
   const footer = document.createElement("div");
   footer.className = "overlay-footer";
 
-  // Display helpful clarification block in Scenario D
-  let hintHTML = "";
-  if (currentMode === "chat_standard") {
-    hintHTML = `<span class="footer-hint">💬 Standard chat should look like this</span>`;
-  }
-
-  // Display writeback button only if active element is editable and not in Chat Assistant mode
-  const showReplace = isTargetEditable() && currentMode !== "chat_standard";
+  // Replace option matches with editable context
+  const showReplace = isTargetEditable();
   const replaceBtnHTML = showReplace ? `<button class="btn btn-replace" id="optReplaceBtn">Replace</button>` : "";
 
   footer.innerHTML = `
-    ${hintHTML}
-    <div class="footer-buttons">
-      <button class="btn btn-dismiss" id="optDismissBtn">Dismiss</button>
-      ${replaceBtnHTML}
-      <button class="btn btn-copy" id="optCopyBtn">Copy</button>
-    </div>
+    <button class="btn btn-dismiss" id="optDismissBtn">Dismiss</button>
+    ${replaceBtnHTML}
+    <button class="btn btn-copy" id="optCopyBtn">Copy</button>
   `;
   card.appendChild(footer);
   footer.querySelector("#optDismissBtn").addEventListener("click", dismissOverlay);
@@ -820,7 +706,7 @@ function finalizeStream(fullText, rawText, currentMode, coords, siteContext, per
     });
   }
 
-  attachTabEvents(rawText, coords, siteContext, persona);
+  attachTabEvents(rawText, coords, persona);
   setTimeout(() => positionOverlay(coords), 10);
 }
 
@@ -840,12 +726,31 @@ function renderError(message, coords) {
     </div>
   `;
   shadowRoot.appendChild(card);
+  attachDragToHeader();
   card.querySelector("#optCloseBtn").addEventListener("click", dismissOverlay);
   card.querySelector("#optDismissBtn").addEventListener("click", dismissOverlay);
   setTimeout(() => positionOverlay(coords), 10);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+function attachDragToHeader() {
+  if (!shadowRoot) return;
+  const header = shadowRoot.querySelector(".overlay-header");
+  if (!header) return;
+  
+  header.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('.dismiss-btn')) return;
+
+    isDraggingOverlay = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragInitialLeft = parseInt(overlayContainer.style.left || 0, 10);
+    dragInitialTop = parseInt(overlayContainer.style.top || 0, 10);
+    document.body.style.userSelect = "none";
+  });
+}
+
 function clearShadow() {
   const styleTag = shadowRoot.querySelector("style");
   shadowRoot.innerHTML = "";
@@ -857,7 +762,7 @@ function escapeHTML(str) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[t]));
 }
 
-function attachTabEvents(rawText, coords, siteContext, persona) {
+function attachTabEvents(rawText, coords, persona) {
   const tabs = shadowRoot.querySelectorAll(".style-tab");
   tabs.forEach(tab => {
     const clone = tab.cloneNode(true);
@@ -869,7 +774,6 @@ function attachTabEvents(rawText, coords, siteContext, persona) {
         text: rawText,
         mode: selectedMode,
         coords,
-        siteContext,
         persona
       });
     });

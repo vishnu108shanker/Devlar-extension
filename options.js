@@ -11,7 +11,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const savePersonaBtn = document.getElementById("savePersonaBtn");
   const personaStatus  = document.getElementById("personaStatus");
 
-  // ── Load saved values and set initial button states
+  // ── Shortcuts Link
+  const shortcutsLink  = document.getElementById("shortcutsLink");
+
+  // ── Load saved values and set initial states
   chrome.storage.local.get(["groqApiKey", "userPersona"], (result) => {
     if (result.groqApiKey) {
       apiKeyInput.value = result.groqApiKey;
@@ -30,6 +33,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const show = apiKeyInput.type === "password";
     apiKeyInput.type = show ? "text" : "password";
     toggleBtn.textContent = show ? "🙈" : "👁️";
+  });
+
+  // ── Programmatically navigate to Shortcuts page (Bypass Chrome Security block)
+  shortcutsLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
   });
 
   // ── Test Key
@@ -52,7 +61,6 @@ document.addEventListener("DOMContentLoaded", () => {
   saveBtn.addEventListener("click", async () => {
     const key = apiKeyInput.value.trim();
 
-    // Clear key if input is empty
     if (!key) {
       chrome.storage.local.remove(["groqApiKey"]);
       saveBtn.textContent = "Save Key";
@@ -88,7 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     chrome.storage.local.set({ userPersona: persona }, () => {
       savePersonaBtn.textContent = "Update Profile";
-      showStatus(personaStatus, "Profile saved! Every prompt is now personalized to you ✨", "success");
+      showStatus(personaStatus, "Profile saved! Responses will match this profile ✨", "success");
     });
   });
 
@@ -103,7 +111,7 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       body: JSON.stringify({ 
         model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: "Reply with OK only." }] 
+        messages: [{ role: "user", content: "Reply with OK." }] 
       })
     });
     if (!res.ok) {
