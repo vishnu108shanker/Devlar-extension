@@ -421,11 +421,11 @@ const overlayStyles = `
 
 // ─── Mode Config: Titles & Tabs ──────────────────────────────────────────────
 const MODES = [
-  { id: "summarize", label: "📝 Summarize" },
-  { id: "prompt_engineer", label: "🤖 Prompt" },
-  { id: "query_refiner", label: "🔍 Refine Query" },
-  { id: "explain", label: "🎓 Explain" },
-  { id: "standardize", label: "✍️ Standardize" }
+  { id: "summarize", label: "Summarize" },
+  { id: "prompt_engineer", label: "Prompt" },
+  { id: "query_refiner", label: "Refine Query" },
+  { id: "explain", label: "Explain" },
+  { id: "standardize", label: "Standardize" }
 ];
 
 function getHeaderHTML() {
@@ -480,7 +480,8 @@ function positionOverlay(coords) {
   overlayContainer.style.top  = `${top}px`;
 }
 
-function getSelectionDetails() {
+// ─── Asynchronous Selection Extraction with PDF Viewer Fallback ──────────────
+async function getSelectionDetails() {
   let text = "";
   let activeEl = document.activeElement;
 
@@ -507,6 +508,22 @@ function getSelectionDetails() {
     if (!text && isInputElement(activeEl)) {
       text = activeEl.innerText || activeEl.textContent || "";
       text = text.trim();
+    }
+  }
+
+  if (!text) {
+    const isPdfPage = window.location.pathname.endsWith(".pdf") ||
+                      document.querySelector('embed[type="application/x-google-chrome-pdf"]');
+    if (isPdfPage) {
+      try {
+        document.execCommand("copy");
+        const clipboardText = await navigator.clipboard.readText();
+        if (clipboardText) {
+          text = clipboardText.trim();
+        }
+      } catch (err) {
+        console.warn("Devlar PDF selection extraction failed:", err);
+      }
     }
   }
 
@@ -579,8 +596,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     lastTargetElement = activeEl;
 
-    const details = getSelectionDetails();
-    sendResponse({ text: details.text, coords: getSelectionCoords() });
+    getSelectionDetails().then(details => {
+      sendResponse({
+        text: details.text,
+        coords: getSelectionCoords()
+      });
+    }).catch(err => {
+      sendResponse({ text: "", coords: getSelectionCoords() });
+    });
+    return true;
   }
   else if (request.action === "showOverlayLoading") {
     ensureOverlayCreated();
